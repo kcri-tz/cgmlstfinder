@@ -439,6 +439,7 @@ class KMA():
         self.percentage_called_alleles = None
         self.called_alleles = None
 
+        tmp_dir = tmp_dir +"/"
         kma_call_list += [
             "-o", result_file_tmp,
             "-tmp", tmp_dir,

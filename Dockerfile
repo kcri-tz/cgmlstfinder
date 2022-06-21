@@ -9,6 +9,7 @@ RUN apt-get update -qq; \
     apt-utils \
     wget \
     python3-pip \
+	prodigal \
     libz-dev \
     ; \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*;
@@ -16,7 +17,7 @@ RUN apt-get update -qq; \
 ENV DEBIAN_FRONTEND Teletype
 
 # Install python dependencies
-RUN pip3 install -U ete3 tabulate cgecore;
+RUN pip3 install -U ete3 tabulate cgecore numpy;
 
 # Install kma
 RUN git clone --depth 1 https://bitbucket.org/genomicepidemiology/kma.git; \
@@ -39,4 +40,4 @@ RUN echo "alias ls='ls -h --color=tty'\n"\
 WORKDIR /workdir
 
 # Execute program when running the container
-ENTRYPOINT ["/usr/src/cgMLST.py"]
+ENTRYPOINT ["python3", "/usr/src/cgMLST.py"]

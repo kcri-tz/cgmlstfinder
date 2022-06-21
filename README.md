@@ -2,20 +2,22 @@ cgMLSTFinder
 ===================
 
 Core genome Multi-Locus Sequence Typing
+cgMLSTFinder runs KMA [1] against a chosen core genome MLST (cgMLST) database and outputs the detected alleles in a matrix file.
 
 
 Documentation
 =============
 
-The cgMLSTFinder service contains one python script *cgmlstfinder.py* which is the script of the latest
-version of the cgMLSTFinder service. The method assigns core genome MLST alleles based on WGS data for several isolates.
-If more 3 or more isolates are run together in one go, and the '--neighbor' flag is set with a executable neighbor program,
-the allele dictances between the isolates will be calculated and a neighbor joining tree will be generated.
+The cgMLSTFinder service contains one python script cgMLST.py which is the script of the latest version of 
+the cgMLSTFinder service. The method assigns core genome MLST alleles based on WGS data for several isolates. If 
+3 or more isolates are run together in one go, and the '--neighbor' flag is set with a executable neighbor 
+program, the allele dictances between the isolates will be calculated and a neighbor joining tree will be generated.
 
 ## Content of the repository
 1. cgMLST.py     - the program
 2. README.md
-3. Dockerfile   - dockerfile for building the pmlst docker container
+3. Dockerfile   - dockerfile for building the cgmlst docker container
+4. make_nj_tree.py - neighbor program
 
 
 ## Installation
@@ -36,7 +38,7 @@ Build Docker container
 docker build -t cgmlstfinder .
 ```
 
-#Download and install cgMLST database
+Download and install cgMLST database
 ```bash
 # Go to the directory where you want to store the cgmlst database
 cd /path/to/some/dir
@@ -48,24 +50,38 @@ cgMLST_DB=$(pwd)
 python3 INSTALL.py
 ```
 
-This script will install the already kma_indexed cgMLST schemes. 
+This script will install the already kma indexed cgMLST schemes. 
 
 ## Dependencies
 In order to run the program without using docker, Python 3.5 (or newer) should be installed along with the following versions of the modules (or newer).
 
-#### Modules
+#### Python module
 - ete3
 
-Modules can be installed using the following command. Here, the installation of the module ete3 is used as an example:
+Module can be installed using the following command. Here, the installation of the module ete3 is used as an example:
 ```bash
 pip3 install ete3
 ```
-#### KMA and BLAST
-Additionally KMA should be installed.
-The newest version of KMA can be installed from here:
+#### KMA
+KMA should be installed. The instructions here will install the newest version of KMA in the default location cgMLST uses. 
+KMA can be installed in another location but the path to KMA will then need to be specified every time you run cgMLSTFinder unless you add the kma program to your PATH.
+```bash
+# Go to the directoy in which you installed the cgMLSTFinder tool
+cd /path/to/some/dir/cgmlstfinder
+git clone https://bitbucket.org/genomicepidemiology/kma.git
+cd kma && make
+```
+Further information can be found here:
 ```url
 https://bitbucket.org/genomicepidemiology/kma
 ```
+
+#### Prodigal (optional)
+Make sure prodigal is installed when running preassembled partial, complete genomes.
+```url
+https://github.com/hyattpd/Prodigal/wiki/installation
+```
+
 
 ## Usage
 Run Docker container
@@ -81,19 +97,19 @@ docker run --rm -it \
 The program can be invoked with the -h option to get help and more information of the service.
 
 ```bash
-usage: cgMLST.py [-h] -s SPECIES -db DB_DIR [-o OUTPUT_DIR] [-t TMP_DIR]
-                 [-k KMA_PATH] [-n NJ_PATH] [-mem]
-                 FASTQ [FASTQ ...]
+usage: cgMLST.py [-h] -i INPUT_FILE(S) -s SPECIES [-db DB_DIR] [-o OUTPUT_DIR] [-t TMP_DIR]
+                 [-k KMA_PATH] [-p PRODIGAL_PATH] [-n NJ_PATH] [-mem] [-q]
+                 
 
 
-positional arguments:
-  FASTQ                 FASTQ files to do cgMLST on.
-
-optional arguments:
-  -h, --help            show this help message and exit
+  -i INPUT --inputfile        FASTQ file(s) or FASTA file to do cgMLST on. 
+						List several filenames in a comma separeted manner without white spaces 
   -s SPECIES, --species SPECIES
                         Species. Must match the name of a species in the
                         database
+optional arguments:
+  -h, --help            show this help message and exit
+
   -db DB_DIR, --databases DB_DIR
                         Directory containing the databases and gene lists for
                         each species.
@@ -104,18 +120,23 @@ optional arguments:
                         the external software.
   -k KMA_PATH, --kmapath KMA_PATH
                         Path to executable kma program.
+  -p PRODIGAL_PATH --prodigal_path
+						Path to Prodigal program
   -n NJ_PATH, --nj_path NJ_PATH
                         Path to executable neighbor joining program.
   -mem, --shared_memory
                         Use shared memory to load database.
+  -q --quiet
 
 ```
 
-Example of command to run cgMLSTFinder:
+Examples of command to run cgMLSTFinder:
 
 ```bash
 python3 cgMLST.py /path/to/isolate.fq.gz -s salmonella -o /path/to/outdir -db /path/to/cgmlstfinder_db/
 -k /usr/local/bin/kma -n /usr/local/bin/neighbor
+
+python 3cgMLST.py -i /path/to/isolate_1.fa.gz,/path/to/isolate_2.fa.gz -s salmonella -db /path/to/cgmlstfinder_db/ -o /path/to/outdir
 ```
 
 ## Web-server
@@ -126,7 +147,17 @@ https://cge.cbs.dtu.dk/services/cgMLSTFinder/
 Citation
 =======
 
-No references
+Please cite the relevant typing scheme, if you intend to publish your results:
+
+**Campylobacter jejuni/coli (pubMLST)**: Campylobacter Multi Locus Sequence Typing website sited at the University of Oxford (Jolley & Maiden 2010, BMC Bioinformatics, 11:595. publication).
+
+**Clostridium (EnteroBase)**:Global gen, et al.,Global genomic population structure of Clostridioides difficile (2019), bioRxiv Aug. 6, 2019.Publication.
+
+**Escherichia coli (EnteroBase)**: Zhou Z., Alikhan NF, Mohamed K, the Agama Study Group, Achtman M (2020), The EnteroBase user's guide, with case studies on Salmonella transmissions, Yersinia pestis phylogeny and Escherichia core genomic diversity. Genome Res. 2020. 30: 138-152. Publication.
+
+**Salmonella (EnteroBase)**:Alikhan NF, Zhou Z,Sergeant MJ, Achtman M. A genomic overview of the population structure of Salmonella. PLoS genetics 2018, 14 (4): e1007261. Publication.
+
+**Yersinia (EnteroBase)**: Zhou Z., Alikhan NF, Mohamed K, the Agama Study Group, Achtman M (2020), The EnteroBase user's guide, with case studies on Salmonella transmissions, Yersinia pestis phylogeny and Escherichia core genomic diversity. Genome Res. 2020. 30: 138-152. Publication.
 
 References
 =======

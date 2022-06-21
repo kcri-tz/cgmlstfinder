@@ -1,23 +1,55 @@
 #!/usr/bin/env python3
-import os, sys, shutil, argparse, subprocess, shlex, pickle, re, gzip, time, json
+
+"""
+cgMLST main script
+
+Contributors:
+C. Johnsen
+P. Clausen
+K. Therkelsen
+
+"""
+version_numb = "v1.2.0"
+
+# imports
+import os, sys, shutil, subprocess, shlex, pickle, re, gzip, time, json
+from argparse import ArgumentParser
 from ete3 import Tree
 from difflib import ndiff
 import hashlib
 
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+
+# for help
+if len(sys.argv) == 1:
+    print ("")
+    print ("cgMLST - Assigns core genome MLST alleles based ")
+    print (version_numb)
+    print ("Used with KMA")
+    print ("")
+    print ("Usage: cgMLST.py <options> ")
+    print ("Ex: cgMLST.py -i /path/to/isolate.fa.gz -s salmonella -db /path/to/cgmlstfinder_db/ -o /path/to/outdir")
+    print ("Ex: cgMLST.py -i /path/to/isolate_1.fa.gz,/path/to/isolate_2.fa.gz -s salmonella -db /path/to/cgmlstfinder_db/ -o /path/to/outdir")
+    print ("")
+    print ("")
+    print ("For help, type: cgMLST.py -h")
+    print ("")
+    sys.exit(1)
+    
+    ##########################################################################
+    # CLASSES AND FUNCTIONS                                                  #   
+    ##########################################################################
 
 class SeqFile():
-    ''' '''
+    """ """
     def __init__(self, seqfile, pe_file_reverse=None, phred_format=None):
-        ''' Constructor.
-        '''
+        """ Constructor.
+        """
         self.phred = phred_format
 
         seqfile = os.path.abspath(seqfile)
         if(not os.path.isfile(seqfile)):
             print("File not found: " + seqfile)
-            quit(1)
+            sys.exit(1)
         self.path = seqfile
         self.pe_file_reverse = None
 
@@ -37,7 +69,7 @@ class SeqFile():
             if(not os.path.isfile(pe_file_reverse)):
                 print("Reverse pair file not found: \"" + pe_file_reverse
                       + "\"")
-                quit(1)
+                sys.exit(1)
             self.path_reverse = pe_file_reverse
 
             self.filename_reverse = SeqFile.get_read_filename(
@@ -47,7 +79,7 @@ class SeqFile():
             if(self.gzipped != SeqFile.is_gzipped(pe_file_reverse)):
                 print("ERROR: It seems that only one of the read pair files is\
                       gzipped.")
-                quit(1)
+                sys.exit(1)
         elif(phred_format):
             self.seq_format = "single"
         else:
@@ -63,19 +95,23 @@ class SeqFile():
 
     @staticmethod
     def get_read_filename(seq_path):
-        ''' Removes path from given string and removes extensions:
+        """ Removes path from given string and removes extensions:
             .fq .fastq .gz and .trim
-        '''
+        """
         seq_path = os.path.basename(seq_path)
         seq_path = seq_path.replace(".fq", "")
         seq_path = seq_path.replace(".fastq", "")
         seq_path = seq_path.replace(".gz", "")
         seq_path = seq_path.replace(".trim", "")
+        seq_path = seq_path.replace(".fa", "")
+        seq_path = seq_path.replace(".fasta", "")
+        seq_path = seq_path.replace(".fna", "")
+        seq_path = seq_path.replace(".trim", "")        
         return seq_path.rstrip()
 
     @staticmethod
     def is_gzipped(file_path):
-        ''' Returns True if file is gzipped and False otherwise.
+        """ Returns True if file is gzipped and False otherwise.
 
             The result is inferred from the first two bits in the file read
             from the input path.
@@ -83,18 +119,18 @@ class SeqFile():
             Theoretically there could be exceptions to this test but it is
             unlikely and impossible if the input files are otherwise expected
             to be encoded in utf-8.
-        '''
-        with open(file_path, mode='rb') as fh:
+        """
+        with open(file_path, mode="rb") as fh:
             bit_start = fh.read(2)
-        if(bit_start == b'\x1f\x8b'):
+        if(bit_start == b"\x1f\x8b"):
             return True
         else:
             return False
 
     @staticmethod
     def group_fastqs(file_paths):
-        '''
-        '''
+        """
+        """
 
         re_filename = re.compile(r"(.+)_S\d+_L(\d+)(_.+)")
         re_seqdb_filename = re.compile(r"([E|S]RR\d+)(_\d+?\..+)")
@@ -124,14 +160,14 @@ class SeqFile():
                 lane_nos[lane_no] = path
                 file_groups[(name, pair_id)] = lane_nos
             else:
-                eprint("Warning: Did not recognise filename: " + filename)
+                print("Warning: Did not recognise filename: " + filename)
 
         return file_groups
 
     @staticmethod
     def concat_fastqs(file_paths, out_path=".", verbose=False):
-        '''
-        '''
+        """
+        """
 
         out_list = []
         file_groups = SeqFile.group_fastqs(file_paths)
@@ -148,19 +184,19 @@ class SeqFile():
                 else:
                     cmd = "cat "
                 cmd += path + " >> " + out_path + "/" + out_filename
-                subprocess.run(cmd, shell=True)
-            subprocess.run("gzip " + out_path + "/" + out_filename, shell=True)
+                subprocess.Popen(cmd, shell=True) 
+            subprocess.Popen("gzip " + out_path + "/" + out_filename, shell=True)
             out_list.append(out_path + "/" + out_filename + ".gz")
             if(verbose):
-                eprint("Wrote: " + out_path + "/" + out_filename + ".gz")
+                print("Wrote: " + out_path + "/" + out_filename + ".gz")
 
         return out_list
 
     @classmethod
     def parse_files(cls, file_paths, phred=None, headers2count=10, min_match=2,
                     force_neighbour=False):
-        '''
-        '''
+        """
+        """
         re_win_newline = re.compile(r"\r\n")
         re_mac_newline = re.compile(r"\r")
 
@@ -347,9 +383,9 @@ class SeqFile():
 
     @staticmethod
     def detect_pair_no(header1, header2):
-        ''' Given two fastq headers, will output if header1 is either 1 or 2.
+        """ Given two fastq headers, will output if header1 is either 1 or 2.
             If the headers are not does not match, method will return None
-        '''
+        """
         head_diff = ndiff(header1, header2)
         mismatches = 0
         pair_no = None
@@ -372,8 +408,8 @@ class SeqFile():
 
     @staticmethod
     def load_seq_files(file_paths):
-        ''' Given a list of file paths, returns a list of SeqFile objects.
-        '''
+        """ Given a list of file paths, returns a list of SeqFile objects.
+        """
         file_paths_str = " ".join(file_paths)
 
         # Running parse_input
@@ -411,7 +447,7 @@ class SeqFile():
 
 class KMA():
 
-    def __init__(self, seqfile, tmp_dir, db, gene_list, kma_path, fasta = False):
+    def __init__(self, seqfile, tmp_dir, db, loci_list, kma_path, fasta = False):
         """ Constructor map reads from seqfile object using kma.
         """
         # Create kma command line list
@@ -423,14 +459,22 @@ class KMA():
                 kma_call_list = [kma_path, "-ipe"]
                 kma_call_list.append(seqfile.path)
                 kma_call_list.append(seqfile.pe_file_reverse)
+                filename = filename.split("/")[-1].split(".")[0]
+                # Erase PE endings
+                filename = filename.replace("_1", "")
+                filename = filename.replace("_2", "")
+                filename = filename.replace("_R1", "")
+                filename = filename.replace("_R2", "")
             else:
                 kma_call_list = [kma_path, "-i"]
                 kma_call_list.append(seqfile.path)
+        
+        # this if for fasta files...
         else:
             kma_call_list = [kma_path, "-i"]
-            filename = seqfile.split('/')[-1].split('.')[0]
+            filename = seqfile.split("/")[-1].split(".")[0]
             kma_call_list.append(seqfile)
-
+        
         result_file_tmp = tmp_dir + "/kma_" + filename
         self.filename = filename
         self.result_file = result_file_tmp + ".res"
@@ -447,13 +491,26 @@ class KMA():
             "-mem_mode", "-cge", "-boot", "-1t1", "-and"]
 
         # Call kma externally
-        eprint("# KMA call: " + " ".join(kma_call_list))
+        print("# KMA call: " + " ".join(kma_call_list))
         process = subprocess.Popen(kma_call_list, shell=False, stdout=subprocess.PIPE) #, stderr=subprocess.PIPE)
         out, err = process.communicate()
-        eprint("KMA call ended")
-
+        print("KMA call ended")
+    
+    def _extract_seq_from_fsa(self, locus):
+        """Extracts sequence to specifed locus entry from kma fasta file."""
+        with open(self.fasta_file, "r") as fsa_file:
+            seq = ""
+            line = fsa_file.readline()
+            for line in fsa_file:
+                if line.startswith(">" + locus):
+                    line=fsa_file.readline()
+                    while line != "" and line[0] != ">":
+                        seq += line
+                        line=fsa_file.readline()               
+        return seq
+    
     def _md5_sum(self, md5_alleles, best_alleles):
-        # Get fasta sequence from kma .fsa file
+        # Get fasta sequence from kma.fsa file
         with open(self.fasta_file, "r") as fsa_file:
             for line in fsa_file:
                 line = line.rstrip()
@@ -464,13 +521,13 @@ class KMA():
                     if md5_alleles[entry]["locus"] not in best_alleles:
                         md5_alleles[entry]["seq"] += line
 
-        # Get md5 for all 'clean' sequences
+        # Get md5 for all "clean" sequences
         for entry, d in md5_alleles.items():
             if d["seq"] != "":
                 # Check that only ATCG are in the sequence and all bases are uppercase
                 # (This assumes that all 4 bases has to be present in the sequence)
                 if set(d["seq"]) == {"A", "T", "C", "G"}:
-                    md5_alleles[entry]["md5"] = hashlib.md5(d["seq"].encode('utf-8')).hexdigest()
+                    md5_alleles[entry]["md5"] = hashlib.md5(d["seq"].encode("utf-8")).hexdigest()
 
         md5_final = {}
         for entry in md5_alleles:
@@ -539,21 +596,29 @@ class KMA():
         # Get called alleles
         allele_profile = [self.filename]
         not_called_alleles = 0
-        for locus in gene_list:
-            locus = locus.strip()
-            if locus in best_alleles:
-                 allele_profile.append(str(best_alleles[locus][0]))
-            elif locus in md5_dict:
-                 allele_profile.append(md5_dict[locus]["md5"])
-            else:
-                 allele_profile.append("-")
-                 not_called_alleles += 1
-        self.called_alleles = len(gene_list) - not_called_alleles
+        hyp_file = os.path.join(outdir, "Hypothetical_new_alleles.fsa")
+        with open(hyp_file, "w") as fh:
+            for locus in loci_list:
+                locus = locus.strip()
+                if locus in best_alleles:
+                     allele_profile.append(str(best_alleles[locus][0]))
+                elif locus in md5_dict:
+                    description = "hyp.allele" + locus
+                    allele_profile.append(description)
+                    # Hypothetical new allele
+                    fh.write(">" + locus + " Hypothetical new allele\n")
+                    seq = self._extract_seq_from_fsa(locus)
+                    fh.write(seq)
+                else:
+                     allele_profile.append("-")
+                     not_called_alleles += 1
+        
+        self.called_alleles = len(loci_list) - not_called_alleles
         try:
-            self.percentage_called_alleles = round((float(self.called_alleles) / len(gene_list)) * 100.0, 2)
+            self.percentage_called_alleles = round((float(self.called_alleles) / len(loci_list)) * 100.0, 2)
         except ZeroDivisionError:
             self.percentage_called_alleles = 0
-
+        #output også hyp_allele_fasta, gerne i output folderen!
         return ["\t".join(allele_profile)]
 
 
@@ -594,7 +659,7 @@ def st_typing(loci_allel_dict, inp, summary_cont, pickle_path):
                     if max_count < score[hit]:
                         max_count = score[hit]
                         best_hit = hit
-                elif(hit is not "None"):
+                elif(hit != "None"):
                     score[hit] = 1
 
             # Prepare output string
@@ -607,10 +672,7 @@ def st_typing(loci_allel_dict, inp, summary_cont, pickle_path):
         summary_cont[sample_name]["cgST"] = best_hit
         summary_cont[sample_name]["allele_matches"] = max_count
         summary_cont[sample_name]["perc_allele_matches"] = similarity
-        summary_cont[sample_name]["total_no_of_loci"] = len(loci) - 1
-
     return summary_cont
-
 
 def file_format(input_files):
     """
@@ -621,8 +683,12 @@ def file_format(input_files):
     fasta_files = []
     fastq_files = []
     invalid_files = []
-    # Open all input files and get the first character
     for infile in input_files:
+        # Check valid input path
+        if not os.path.exists(infile):
+            print("Input Error: Input file does not exist!\n")
+            sys.exit(1)    
+        # Open input file and get the first character
         try:
             f =  gzip.open(infile, "rb")
             fst_char = f.read(1)
@@ -630,170 +696,240 @@ def file_format(input_files):
             f = open(infile, "rb")
             fst_char = f.read(1)
         f.close()
-        #fst_char = f.readline().decode("ascii")[0]
-        #print(fst_char)
         # Return file format based in first char
-        if fst_char == b'@':
+        if fst_char == b"@":
             fastq_files.append(infile)
-        elif fst_char == b'>':
+        elif fst_char == b">":
             fasta_files.append(infile)
         else:
             invalid_files.append(infile)
     return (fasta_files, fastq_files, invalid_files)
 
 
-if __name__ == '__main__':
-    #
-    # Handling arguments
-    #
-    parser = argparse.ArgumentParser(description="")
-    # Posotional arguments
-    parser.add_argument("input",
-                        help="FASTQ files to do cgMLST on.",
-                        nargs="+",
-                        metavar="FASTQ",
-                        default=None)
+def runProd(assembly_path, prod_path, outdir):
+    """
+    Executes Prodigal from the input file and return file of the coding regions 
+    in nucleotides.
+    assembly_path contains the contigs/assembled genome in fasta format.
+    prod_path is the path prodigal specified with -p.
+    """
+    if SeqFile.is_gzipped(assembly_path):
+        # Unzip file before running Prodigal
+        cmd = "gzip -d {}".format(assembly_path)
+        subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL)
+        assembly_path = assembly_path.strip(".gz")  # remove .gz eding
+    # Process assembly input and define CDS filename
+    filename = os.path.basename(assembly_path).split(".")[0] 
+    CDS_file = os.path.join(outdir, filename + ".cds")
+        
+    # Execute prodigal and write coding regions to file
+    cmd = "{} -c -q -i {} -d {}".format(prod_path,assembly_path,CDS_file)
+    print("# Executing Prodigal on " + assembly_path)
+    print("#")
+    print("# Prodigal call: " + cmd)
+    print("#")
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL).wait() 
+    print("Prodigal call ended")
+    cmd = "rm {}".format(assembly_path)       
+    subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL) 
+    return CDS_file   
+        
+
+if __name__ == "__main__":
+    
+    ##########################################################################
+    # PARSE COMMAND LINE OPTIONS                                             #
+    ##########################################################################
+    
+    parser = ArgumentParser()
+    
+    parser.add_argument("-i", "--inputfile",
+                              help="FASTA or FASTQ files to type.",
+                              default=None)
     parser.add_argument("-s", "--species",
-                        help="Species. Must match the name of a species in the database",
-                        default=None,
-                        metavar="SPECIES",
-                        required=True)
-    parser.add_argument("-db", "--databases",
-                        help="Directory containing the databases and gene\
-                              lists for each species.",
-                        metavar="DB_DIR",
-                        required=True)
+                        help="Species. Must match the name of a species directory in the database",
+                        default=None)
     # Optional arguments
+    parser.add_argument("-db", "--databases",
+                        help="Path to the directory containing the databases and gene\
+                              lists for each species.",
+                        default="cgmlstfinder_db")
     parser.add_argument("-o", "--outdir",
                         help="Output directory.",
-                        default=os.getcwd(),
-                        metavar="OUTPUT_DIR")
+                        default="")
     parser.add_argument("-t", "--tmp_dir",
                         help="Temporary directory for storage of the results\
                               from the external software.")
+    parser.add_argument("-p", "--prodigal_path",
+                              help="Path to Prodigal if input is in FASTA format",
+                              default="prodigal")
     parser.add_argument("-k", "--kmapath",
                         help="Path to executable kma program.",
-                        default="kma",
-                        metavar="KMA_PATH")
+                        default="kma")     
     parser.add_argument("-n", "--nj_path",
-                        help="Path to executable neighbor joining program.",
-                        metavar="NJ_PATH")
+                        help="Path to executable neighbor joining program.")                        
     parser.add_argument("-mem", "--shared_memory",
-                        action='store_true',
+                        action="store_true",
                         help="Use shared memory to load database.")
-
+    parser.add_argument("-q", "--quiet", action="store_true")
+    parser.add_argument("--version", action="version", version=version_numb)
     args = parser.parse_args()
+    
+    
+    
+    ##########################################################################
+    # MAIN                                                                   #   
+    ##########################################################################
+    
+    
+    ##### Validate arguments
 
+    # Check if valid output directory is provided
     if args.outdir:
         outdir = os.path.abspath(args.outdir)
         if not os.path.exists(args.outdir):
-            sys.exit("Output directory '{}' does not exist".format(outdir))
+            print("Input Error: Output dirctory does not exists!\n")
+            sys.exit(1)
     else:
        outdir = os.getcwd()
-
+    
+    # Check if valid temporary directory is provided
     if args.tmp_dir:
         tmp_dir = os.path.abspath(args.tmp_dir)
         if not os.path.exists(tmp_dir):
-            sys.exit("Temperary directory '{}' does not exist".format(tmp_dir))
+            print("Input Error: temperary directory does not exist\n")
+            sys.exit(1)
     else:
         tmp_dir = outdir
-
-    # Check kma path
+        
+    # Check if valid kma path is provided
     if shutil.which(args.kmapath) is None:
-        eprint("The path to kma, '%s', is not executable, append kma to"
-               "$PATH"%(args.kmapath))
-        quit(1)
+        print("No valid path to a kma program was provided. Use the -k flag to provide the path.")
+        sys.exit(1)
     kma_path = args.kmapath
-
-    # Species scheme database
-    species = args.species
-    db_dir = args.databases + "/" + species
+    
+    # Check if valid database is provided
+    if args.databases:
+        db_path = os.path.abspath(args.databases)
+        if not os.path.exists(args.databases):
+            print("Input Error: The specified database directory does not "
+                 "exist!\n")
+            sys.exit(1)  
+        
+    # Specify species scheme database
+    if args.species is None:
+        print("Input Error: No species name was provided!\n")
+        sys.exit(1)
+    else:
+        species = args.species
+    # Save paths including species
+    db_dir = db_path + "/" + species
     db_species_scheme = db_dir + "/" + species
+    
+    
+    ## Loci file loading
+    
+    # Check existence of the loci list file
+    loci_list_file = "%s/loci_list.txt" % (db_dir)
+    if(not os.path.isfile(loci_list_file)):
+        print("Loci list not found at expected location: %s"%(loci_list_file))
+        sys.exit(1)
+    
+    # Load loci file into list
+    with open(loci_list_file, "r") as ll:
+        loci_list = [locus.strip() for locus in ll.readlines()]
 
-    # Test if database is found and indexed (works for both kma-1.0 and kma-2.0)
-    db_files = [species + ".length.b"]
-
-    for db_file in db_files:
-        if(not os.path.isfile(db_dir + "/" + db_file)):
-            eprint("ERROR: A KMA index file seems to be missing from the"
-                   "database directory. You may need to run kma_index.\n"
-                   "Missing file: " + db_dir + "/" + db_file)
-            quit(1)
-
-    # Gene list
-    gene_list_filename = (db_dir + "/loci_list.txt")
-
-    if(not os.path.isfile(gene_list_filename)):
-        eprint("Gene list not found at expected location: %s"%(gene_list_filename))
-        quit(1)
-
-    # Check file format of input files (fasta or fastq, gz or not gz)
-    (fasta_files, fastq_files, invalid_files) = file_format(args.input)
-    print("Input files: %d fasta file(s)\n"
-          "             %d fastq file(s)\n"
-          "             %d invalid file(s)"%(len(fasta_files),
-                                             len(fastq_files),
-                                             len(invalid_files)))
-
-    # Load files and pair them if necessary
-    print("Parsing files:" + str(args.input))
-    fastq_files = SeqFile.parse_files(fastq_files, phred=33)
-
-    # Get gene_list_file into list
-    try:
-        gene_list_file = open(gene_list_filename, "r")
-    except IOError:
-        eprint("NO valid genefile found")
-        sys.exit(-1)
-    gene_list = [locus.strip() for locus in  gene_list_file.readlines()]
-    gene_list_file.close()
-
-    # Write header to output file
-    allel_output = ["Genome\t%s" %("\t".join(gene_list))]
+    # Write loci in header of output file
+    allel_output = ["Genome\t%s" %("\t".join(loci_list))]
     summary_cont = {}
 
     # Load ST-dict pickle
-    pickle_path = db_dir + "/profile.p"
+    pickle_path = "%s/profile.p" % (db_dir)
     if os.path.isfile(pickle_path):
         try:
             loci_allel_dict = pickle.load(open(pickle_path, "rb"))
-            print("pickle_loaded!")
         except IOError:
-            eprint("Error, pickle '{}' could not be loaded".format(pickle_path))
+            print("Error, pickle '{}' could not be loaded\n".format(pickle_path))
             sys.exit(1)
     else:
         loci_allel_dict = {}
+    
+    # Load and check input file(s)
+    if args.inputfile is None:
+        print("Input Error: No inputfile was provided!\n")
+        sys.exit(1)
+    inputfile_lst = args.inputfile.split(",")
+    for file in inputfile_lst:
+        if not os.path.exists(file):
+            print("Input Error: Input file not found at expected location: %s"%(file))
+            sys.exit(1)
+    # Check file format of input files (fasta or fastq, gz or not gz)
+    (fasta_files, fastq_files, invalid_files) = file_format(inputfile_lst)
+
+
+    ##### Process data
+    
+   
     # Load KMA database into shared memory
     if args.shared_memory:
         cmd = "{}/kma_shm -t_db {}".format(os.path.dirname(kma_path),db_species_scheme)
         proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = proc.communicate()
         error_code = proc.returncode
-
         if error_code != 0:
             print("Shared memory could not be used.\nErr: {}".format(err))
+    
+    if len(fastq_files) == 0 and len(fasta_files) == 0:
+        print("Input file must be fastq or fasta format.\n")
+        sys.exit(1)
+        
+    # If input is raw reads
+    if len(fastq_files) >= 1:
+    
+        # Load fastq files and pair them if necessary
+        fastq_files = SeqFile.parse_files(fastq_files, phred=33)  
+        
+        # Find alleles from fastq file using KMA
+        for seqfile in fastq_files:
+            
+            # Run KMA
+            seq_kma = KMA(seqfile, tmp_dir, db_species_scheme, loci_list, kma_path, fasta = False)
 
-    for seqfile in fasta_files:
-        # Run KMA to find alleles from fasta file
-        seq_kma = KMA(seqfile, tmp_dir, db_species_scheme, gene_list, kma_path, fasta = True)
+            # Get called allelel
+            allel_output += seq_kma.best_allel_hits()
 
-        # Get called allelel
-        allel_output += seq_kma.best_allel_hits()
+            # Get summery file content
+            summary_cont[seq_kma.filename] = {"called_alleles":str(seq_kma.called_alleles),
+                                              "perc_called_alleles":str(seq_kma.percentage_called_alleles)}
 
-        # Get summery file content
-        summary_cont[seq_kma.filename] = {"called_alleles":str(seq_kma.called_alleles),
-                                          "perc_called_alleles":str(seq_kma.percentage_called_alleles)}
+    # If input is an assembly
+    if len(fasta_files) >= 1:
+        
+        # Check if valid prodigal path is provided
+        if args.prodigal_path != "prodigal":
+            prod_path = os.path.abspath(args.prodigal_path)
+            if not os.path.exists(prod_path):
+                print("Input Error: prodigal path does not exist: " + prod_path + "\n")
+                sys.exit(1)
+        else:
+            prod_path = args.prodigal_path
+        
+        # Run KMA on coding regions
+        for seqfile in fasta_files:          
+            # Run prodigal to identify coding regions
+            CDS_file = runProd(seqfile, prod_path, outdir)
+            
+            # Run KMA to find alleles from fasta file
+            seq_kma = KMA(CDS_file, tmp_dir, db_species_scheme, loci_list, kma_path, fasta = True)
+            cmd = "rm {}".format(CDS_file)
+            subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL)
+            
+            # Get called allelel
+            allel_output += seq_kma.best_allel_hits()
 
-    for seqfile in fastq_files:
-        # Run KMA to find alleles from fastq file
-        seq_kma = KMA(seqfile, tmp_dir, db_species_scheme, gene_list, kma_path, fasta = False)
-
-        # Get called allelel
-        allel_output += seq_kma.best_allel_hits()
-
-        # Get summery file content
-        summary_cont[seq_kma.filename] = {"called_alleles":str(seq_kma.called_alleles),
-                                          "perc_called_alleles":str(seq_kma.percentage_called_alleles)}
+            # Get summery file content
+            summary_cont[seq_kma.filename] = {"called_alleles":str(seq_kma.called_alleles),
+                                              "perc_called_alleles":str(seq_kma.percentage_called_alleles)}
 
     # Destroy KMA database from shared memory
     if args.shared_memory:
@@ -801,23 +937,25 @@ if __name__ == '__main__':
         proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = proc.communicate()
         error_code = proc.returncode
-
         if error_code != 0:
             print("Shared memory could not be destroyed.\nErr: {}".format(err))
-
+    
+    
+    ##### Prepare output
+    
     # Write output summary file
     summary_file = os.path.join(outdir, species + "_summary.txt")
     summary_header = "Sample_name\tTotal_number_of_loci\tNumber_of_called_alleles\t%_Called_alleles\tcgST\tAllele_matches_in_cgST\t%_Allele_matches"
     # Create output lines
     summary_cont = st_typing(loci_allel_dict, allel_output, summary_cont, pickle_path)
-
+    
     # Create output string
     output_lines = []
     for filename, d in summary_cont.items():
-        output_lines.append("\t".join([filename, str(len(gene_list)),
+        output_lines.append("\t".join([filename, str(len(loci_list)),
                                    str(d["called_alleles"]), str(d["perc_called_alleles"]),
                                    str(d["cgST"]), str(d["allele_matches"]), str(d["perc_allele_matches"])]))
-
+    
     # Write ST-type output
     with open(summary_file, "w") as fh:
         fh.write(summary_header + "\n")
@@ -833,10 +971,10 @@ if __name__ == '__main__':
     # Write json file
     service = "cgMLSTFinder"
     data = {service:{}}
-    userinput = {"filenames":args.input, "species":args.species}
+    userinput = {"filenames":args.inputfile, "species":args.species}
     run_info = {"date":time.strftime("%d.%m.%Y"),
                 "time":time.strftime("%H:%M:%S")}
-
+    
     data[service]["user_input"] = userinput
     data[service]["run_info"] = run_info
     data[service]["results"] = summary_cont
@@ -845,7 +983,7 @@ if __name__ == '__main__':
     with open(result_file, "w") as outfile:
         json.dump(data, outfile)
 
-    # Create tree if neighbor parameter was sat
+    ##### Extended format - Create tree if neighbor parameter was sat
     if args.nj_path:
         # Check that more than 2 + header samples are included in the analysis
         if len(allel_output) > 3:
@@ -858,7 +996,7 @@ if __name__ == '__main__':
             err = err.decode("utf-8")
 
             if proc.returncode != 0:
-                eprint("No neighbor joining tree was created. The neighbor program responded with this: {}".format(err))
+                print("No neighbor joining tree was created. The neighbor program responded with this: {}".format(err))
             else:
                 # print newick
 

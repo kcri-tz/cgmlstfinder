@@ -706,7 +706,7 @@ def file_format(input_files):
     return (fasta_files, fastq_files, invalid_files)
 
 
-def runProd(assembly_path, prod_path, outdir):
+def runProd(assembly_path, prod_path, tmp_dir, outdir):
     """
     Executes Prodigal from the input file and return file of the coding regions 
     in nucleotides.
@@ -715,9 +715,9 @@ def runProd(assembly_path, prod_path, outdir):
     """
     if SeqFile.is_gzipped(assembly_path):
         # Unzip file before running Prodigal
-        cmd = "gzip -d {}".format(assembly_path)
-        subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL)
-        assembly_path = assembly_path.strip(".gz")  # remove .gz eding
+        cmd = "gzip -cd {}".format(assembly_path)
+        assembly_path = os.path.join(tmp_dir, os.path.basename(assembly_path).strip(".gz"))
+        subprocess.Popen(cmd, shell=True, stdout=assembly_path)
     # Process assembly input and define CDS filename
     filename = os.path.basename(assembly_path).split(".")[0] 
     CDS_file = os.path.join(outdir, filename + ".cds")
@@ -730,8 +730,6 @@ def runProd(assembly_path, prod_path, outdir):
     print("#")
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL).wait() 
     print("Prodigal call ended")
-    cmd = "rm {}".format(assembly_path)       
-    subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL) 
     return CDS_file   
         
 
@@ -917,7 +915,7 @@ if __name__ == "__main__":
         # Run KMA on coding regions
         for seqfile in fasta_files:          
             # Run prodigal to identify coding regions
-            CDS_file = runProd(seqfile, prod_path, outdir)
+            CDS_file = runProd(seqfile, prod_path, tmp_dir, outdir)
             
             # Run KMA to find alleles from fasta file
             seq_kma = KMA(CDS_file, tmp_dir, db_species_scheme, loci_list, kma_path, fasta = True)

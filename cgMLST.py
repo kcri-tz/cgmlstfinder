@@ -717,7 +717,9 @@ def runProd(assembly_path, prod_path, tmp_dir, outdir):
         # Unzip file before running Prodigal
         cmd = "gzip -cd {}".format(assembly_path)
         assembly_path = os.path.join(tmp_dir, os.path.basename(assembly_path).strip(".gz"))
-        subprocess.Popen(cmd, shell=True, stdout=assembly_path)
+        with open(assembly_path, "w+") as f:
+            subprocess.Popen(cmd, shell=True, stdout=f)
+
     # Process assembly input and define CDS filename
     filename = os.path.basename(assembly_path).split(".")[0] 
     CDS_file = os.path.join(outdir, filename + ".cds")
